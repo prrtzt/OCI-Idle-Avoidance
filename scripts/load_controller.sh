@@ -75,18 +75,16 @@ init_log_file() {
     fi
 
     if [[ -L "$log_dir" ]]; then
-        # Allow systemd-managed private log directories (symlinks to /var/log/private/*)
-        local resolved_dir
-        resolved_dir="$(readlink -f "$log_dir" 2>/dev/null || echo "")"
-        if [[ ! "$resolved_dir" =~ ^/var/log/private/ ]]; then
+        # Allow systemd-managed private log directories (symlinks containing "private/")
+        local symlink_target
+        symlink_target="$(readlink "$log_dir" 2>/dev/null || echo "")"
+        if [[ ! "$symlink_target" =~ private/ ]]; then
             echo "ERROR: Log directory is a symlink, refusing to use: $log_dir" >&2
             LOG_FILE="$DEFAULT_LOG_FILE"
             log_dir="$(dirname "$LOG_FILE")"
-        else
-            # Use resolved path for systemd-managed directories
-            log_dir="$resolved_dir"
-            LOG_FILE="${resolved_dir}/$(basename "$LOG_FILE")"
         fi
+        # For systemd-managed directories, keep using the symlink path
+        # The dynamic user will have proper permissions through systemd
     fi
 
     if ! mkdir -p "$log_dir" 2>/dev/null; then
