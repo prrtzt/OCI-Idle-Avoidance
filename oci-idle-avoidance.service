@@ -6,16 +6,19 @@ Documentation=https://github.com/pierre/OCI-Idle-Avoidance
 [Service]
 Type=simple
 # IMPORTANT: Update this path to match where you cloned the repository
-WorkingDirectory=/opt/oci-idle-avoidance/scripts
-ExecStart=/opt/oci-idle-avoidance/scripts/load_controller.sh
+WorkingDirectory=/opt/OCI-Idle-Avoidance/scripts
+ExecStart=/opt/OCI-Idle-Avoidance/scripts/load_controller.sh
+Environment=LOG_FILE=/var/log/oci-idle-avoidance/load_controller.log
+LogsDirectory=oci-idle-avoidance
 
 # Restart the service if it crashes
 Restart=on-failure
 RestartSec=10s
 
-# Run as root (required for system monitoring)
-User=root
-Group=root
+# Run as an unprivileged account
+User=nobody
+NoNewPrivileges=true
+PrivateTmp=true
 
 # Logging
 StandardOutput=journal

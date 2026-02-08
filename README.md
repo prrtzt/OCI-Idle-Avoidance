@@ -9,7 +9,7 @@ The scripts work by monitoring the CPU usage and spinning up "load generator" Py
 ### Structure
 This repository contains two scripts and a systemd service file:
 
-1. A Bash script (`load_controller.sh`): This script continuously monitors the CPU usage and spins up "load generator" Python scripts when the CPU usage drops below 22%. It also manages the load generators, stopping them when CPU usage is above 27%, and stopping all of them when CPU usage is above 80%. The script logs all activity with timestamps to both console and a log file (`load_controller.log`).
+1. A Bash script (`load_controller.sh`): This script continuously monitors CPU usage and starts/stops "load generator" Python processes based on thresholds. It starts 5 generators below 19%, starts 1 generator between 19% and 22%, stops 1 generator above 27%, and stops all generators above 80%. It also enforces a maximum generator count to prevent runaway process growth. All activity is logged with timestamps.
 
 2. A Python script (`load_generator.py`): This script runs a loop that consumes CPU cycles. The number of cycles consumed per second can be configured by adjusting the argument passed to the script.
 
@@ -41,7 +41,7 @@ Clone this repository to your OCI VM:
 
 ```bash
 cd /opt
-sudo git clone https://github.com/yourusername/OCI-Idle-Avoidance.git
+sudo git clone https://github.com/pierre/OCI-Idle-Avoidance.git
 cd OCI-Idle-Avoidance
 ```
 
@@ -62,6 +62,7 @@ sudo nano oci-idle-avoidance.service
 ```
 
 Update the `WorkingDirectory` and `ExecStart` paths if you cloned the repository to a different location.
+The service is configured to run as `nobody`; ensure your install path is readable by that user.
 
 2. Copy the service file to systemd:
 
@@ -89,8 +90,8 @@ sudo systemctl status oci-idle-avoidance
 # View live logs
 sudo journalctl -u oci-idle-avoidance -f
 
-# View log file (includes all activity with timestamps)
-tail -f /opt/OCI-Idle-Avoidance/scripts/load_controller.log
+# View controller log file (configured by the service unit)
+sudo tail -f /var/log/oci-idle-avoidance/load_controller.log
 
 # Stop the service
 sudo systemctl stop oci-idle-avoidance
