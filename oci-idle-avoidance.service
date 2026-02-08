@@ -2,23 +2,36 @@
 Description=OCI Idle Avoidance Controller
 After=network.target
 Documentation=https://github.com/pierre/OCI-Idle-Avoidance
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
-# IMPORTANT: Update this path to match where you cloned the repository
+
+# IMPORTANT: Update these paths to match where you cloned the repository
+# Default assumes /opt/OCI-Idle-Avoidance - edit if installed elsewhere
 WorkingDirectory=/opt/OCI-Idle-Avoidance/scripts
 ExecStart=/opt/OCI-Idle-Avoidance/scripts/load_controller.sh
+
+# Log file location (directory created automatically by LogsDirectory)
 Environment=LOG_FILE=/var/log/oci-idle-avoidance/load_controller.log
 LogsDirectory=oci-idle-avoidance
+LogsDirectoryMode=0750
 
-# Restart the service if it crashes
+# Optional: Override generator CPU usage (0.0-1.0, default 0.01)
+# Environment=GENERATOR_USAGE=0.01
+
+# Restart policy with limits to prevent runaway restarts
 Restart=on-failure
 RestartSec=10s
 
-# Run as an unprivileged account
+# Security hardening
 User=nobody
 NoNewPrivileges=true
 PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/log/oci-idle-avoidance
 
 # Logging
 StandardOutput=journal

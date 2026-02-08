@@ -1,19 +1,45 @@
 ## OCI-Idle-Avoidance
+
 A set of scripts designed to maintain a minimum level of CPU usage on Oracle Cloud VMs, preventing them from being reclaimed due to idling. Ideal for environments with fluctuating resource demands.
 
 ### Overview
+
 This repository contains scripts to help maintain a minimum level of CPU usage on a virtual machine (VM) to prevent Oracle Cloud Infrastructure (OCI) from shutting it down due to idling. This is in response to a policy change in OCI where VMs can be reclaimed if they idle for a certain period.
 
 The scripts work by monitoring the CPU usage and spinning up "load generator" Python scripts to consume CPU cycles when usage drops below a certain level. If a user's VM is running services that require a lot of resources at times and idles at other times, this script will ensure that the CPU usage stays above the OCI threshold, ensuring the VM remains active even during idle times.
 
 ### Structure
+
 This repository contains two scripts and a systemd service file:
 
-1. A Bash script (`load_controller.sh`): This script continuously monitors CPU usage and starts/stops "load generator" Python processes based on thresholds. It starts 5 generators below 19%, starts 1 generator between 19% and 22%, stops 1 generator above 27%, and stops all generators above 80%. It also enforces a maximum generator count to prevent runaway process growth. All activity is logged with timestamps.
+1. **Bash script (`load_controller.sh`)**: Continuously monitors CPU usage and starts/stops "load generator" Python processes based on thresholds. Includes graceful signal handling, input validation, and secure logging.
 
-2. A Python script (`load_generator.py`): This script runs a loop that consumes CPU cycles. The number of cycles consumed per second can be configured by adjusting the argument passed to the script.
+2. **Python script (`load_generator.py`)**: Runs a loop that consumes CPU cycles. Handles signals gracefully for clean shutdown.
 
-3. A systemd service file (`oci-idle-avoidance.service`): Allows the controller to run as a system service with automatic startup on boot and restart on failure.
+3. **Systemd service file (`oci-idle-avoidance.service`)**: Allows the controller to run as a system service with automatic startup on boot, restart limits, and security hardening.
+
+### Configuration
+
+The controller uses the following thresholds (configurable in `load_controller.sh`):
+
+| Threshold | Default | Action |
+|-----------|---------|--------|
+| `LOW_BURST_THRESHOLD` | 19% | Below this: start 5 generators |
+| `LOW_SINGLE_THRESHOLD` | 22% | Below this: start 1 generator |
+| `HIGH_THRESHOLD` | 27% | Above this: stop 1 generator |
+| `CRITICAL_THRESHOLD` | 80% | Above this: stop ALL generators |
+
+**Hysteresis Zone (22-27%)**: No action is taken in this range to prevent oscillation.
+
+Additional settings:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MAX_GENERATORS` | 40 | Maximum concurrent generator processes |
+| `GENERATOR_USAGE` | 0.01 | CPU fraction per generator (0.0-1.0) |
+| `LOOP_SLEEP_SECONDS` | 5 | Monitoring interval in seconds |
+
+The `GENERATOR_USAGE` can also be set via environment variable.
 
 ## Requirements
 
@@ -23,12 +49,13 @@ This script requires:
 2. **sysstat package** - For CPU monitoring via `mpstat` command
 3. **systemd** - For running as a service (optional, but recommended)
 4. **bc** - For floating-point arithmetic in bash
+5. **coreutils** - For `timeout` command
 
 To install these on Ubuntu/Debian:
 
 ```bash
 sudo apt-get update
-sudo apt-get install python3 sysstat bc
+sudo apt-get install python3 sysstat bc coreutils
 ```
 
 **Note:** `screen` is no longer required when using the systemd service method, but can be used as an alternative for manual execution.
@@ -55,14 +82,20 @@ sudo chmod +x scripts/load_controller.sh
 
 Installing as a systemd service ensures the script runs automatically on boot and restarts if it crashes.
 
-1. Edit the service file to update the installation path if needed:
+1. **If installing to a non-standard path**, edit the service file:
 
 ```bash
 sudo nano oci-idle-avoidance.service
 ```
 
-Update the `WorkingDirectory` and `ExecStart` paths if you cloned the repository to a different location.
-The service is configured to run as `nobody`; ensure your install path is readable by that user.
+Update `WorkingDirectory` and `ExecStart` to match your installation path:
+
+```ini
+WorkingDirectory=/your/custom/path/OCI-Idle-Avoidance/scripts
+ExecStart=/your/custom/path/OCI-Idle-Avoidance/scripts/load_controller.sh
+```
+
+The service runs as `nobody`; ensure the install path is readable by that user.
 
 2. Copy the service file to systemd:
 
@@ -103,6 +136,17 @@ sudo systemctl restart oci-idle-avoidance
 sudo systemctl disable oci-idle-avoidance
 ```
 
+#### Customizing Generator Usage
+
+To change how much CPU each generator consumes, set the environment variable:
+
+```bash
+# In /etc/systemd/system/oci-idle-avoidance.service
+Environment=GENERATOR_USAGE=0.02
+```
+
+Then reload: `sudo systemctl daemon-reload && sudo systemctl restart oci-idle-avoidance`
+
 ### Alternative: Running Manually with Screen
 
 If you prefer not to use systemd, you can run the script manually using `screen`:
@@ -114,5 +158,20 @@ screen -S oci-idle
 ```
 
 Detach from screen with `Ctrl + A`, then `D`. Reattach later with `screen -r oci-idle`.
+
+### Troubleshooting
+
+**Service fails to start:**
+- Check paths in service file match installation location
+- Ensure `nobody` can traverse/read required paths and scripts:
+  `sudo chmod a+rx /opt /opt/OCI-Idle-Avoidance /opt/OCI-Idle-Avoidance/scripts /opt/OCI-Idle-Avoidance/scripts/load_controller.sh /opt/OCI-Idle-Avoidance/scripts/load_generator.py`
+
+**No log output:**
+- Check log directory permissions: `ls -la /var/log/oci-idle-avoidance/`
+- View journal logs: `journalctl -u oci-idle-avoidance -n 50`
+
+**High CPU usage:**
+- The controller will automatically stop generators if CPU exceeds 80%
+- Reduce `GENERATOR_USAGE` value for finer control
 
 Remember, a busy VM is a happy VM! Happy computing!
