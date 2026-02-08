@@ -5,5 +5,5 @@
     delaycompress
     missingok
     notifempty
-    create 0640 nobody root
+    nocreate
 }

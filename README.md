@@ -40,8 +40,9 @@ Additional settings:
 | `MAX_GENERATORS` | 40 | Maximum concurrent generator processes |
 | `GENERATOR_USAGE` | 0.01 | CPU fraction per generator (0.0-1.0) |
 | `MPSTAT_INTERVAL` | 5 | CPU sampling interval in seconds |
+| `CONTROLLER_LOCK_FILE` | `<log-dir>/load_controller.lock` | Lock file path used to prevent multiple controller instances |
 
-The `GENERATOR_USAGE` can also be set via environment variable.
+The `GENERATOR_USAGE` and `CONTROLLER_LOCK_FILE` can also be set via environment variables.
 
 ## Requirements
 
@@ -52,12 +53,13 @@ This script requires:
 3. **systemd** - For running as a service (optional, but recommended)
 4. **bc** - For floating-point arithmetic in bash
 5. **coreutils** - For `timeout` command
+6. **procps** - For `ps` command used in process validation
 
 To install these on Ubuntu/Debian:
 
 ```bash
 sudo apt-get update
-sudo apt-get install python3 sysstat bc coreutils
+sudo apt-get install python3 sysstat bc coreutils procps
 ```
 
 **Note:** `screen` is no longer required when using the systemd service method, but can be used as an alternative for manual execution.
@@ -70,7 +72,7 @@ Clone this repository to your OCI VM:
 
 ```bash
 cd /opt
-sudo git clone https://github.com/pierre/OCI-Idle-Avoidance.git
+sudo git clone https://github.com/prrtzt/OCI-Idle-Avoidance.git
 cd OCI-Idle-Avoidance
 ```
 
@@ -97,7 +99,7 @@ WorkingDirectory=/your/custom/path/OCI-Idle-Avoidance/scripts
 ExecStart=/your/custom/path/OCI-Idle-Avoidance/scripts/load_controller.sh
 ```
 
-The service runs as `nobody`; ensure the install path is readable by that user.
+The service runs as an unprivileged dynamic user (`DynamicUser=true`), so no manual user creation is required.
 
 2. Copy the service file to systemd:
 
@@ -149,6 +151,13 @@ Environment=GENERATOR_USAGE=0.02
 
 Then reload: `sudo systemctl daemon-reload && sudo systemctl restart oci-idle-avoidance`
 
+To set a custom lock file path (optional):
+
+```bash
+# In /etc/systemd/system/oci-idle-avoidance.service
+Environment=CONTROLLER_LOCK_FILE=/var/log/oci-idle-avoidance/load_controller.lock
+```
+
 #### Setting Up Log Rotation (Recommended)
 
 To prevent log files from growing indefinitely, install the logrotate configuration:
@@ -158,6 +167,14 @@ sudo cp oci-idle-avoidance.logrotate /etc/logrotate.d/oci-idle-avoidance
 ```
 
 This rotates logs weekly, keeping 4 compressed copies.
+
+### Running Smoke Tests
+
+Run the lightweight test suite locally:
+
+```bash
+./tests/run_smoke_tests.sh
+```
 
 ### Alternative: Running Manually with Screen
 
@@ -175,7 +192,7 @@ Detach from screen with `Ctrl + A`, then `D`. Reattach later with `screen -r oci
 
 **Service fails to start:**
 - Check paths in service file match installation location
-- Ensure `nobody` can traverse/read required paths and scripts:
+- Ensure the installation path and scripts are readable/executable by unprivileged users:
   `sudo chmod a+rx /opt /opt/OCI-Idle-Avoidance /opt/OCI-Idle-Avoidance/scripts /opt/OCI-Idle-Avoidance/scripts/load_controller.sh /opt/OCI-Idle-Avoidance/scripts/load_generator.py`
 
 **No log output:**

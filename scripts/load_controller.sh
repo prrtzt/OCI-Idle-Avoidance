@@ -42,6 +42,10 @@ load_pids=()
 # Logging initialization flag
 _log_initialized=false
 
+# Controller instance lock
+_lock_acquired=false
+CONTROLLER_LOCK_FILE="${CONTROLLER_LOCK_FILE:-}"
+
 # ============================================================================
 # Initialization
 # ============================================================================
@@ -95,6 +99,74 @@ init_log_file() {
     fi
 
     _log_initialized=true
+}
+
+init_lock_file() {
+    if [[ -z "$CONTROLLER_LOCK_FILE" ]]; then
+        CONTROLLER_LOCK_FILE="$(dirname "$LOG_FILE")/load_controller.lock"
+    fi
+}
+
+acquire_instance_lock() {
+    local lock_pid
+    local lock_dir
+
+    init_lock_file
+    lock_dir="$(dirname "$CONTROLLER_LOCK_FILE")"
+
+    if [[ -L "$CONTROLLER_LOCK_FILE" ]]; then
+        echo "ERROR: Lock file path is a symlink, refusing to use: $CONTROLLER_LOCK_FILE" >&2
+        exit 1
+    fi
+
+    if [[ -L "$lock_dir" ]]; then
+        echo "ERROR: Lock directory is a symlink, refusing to use: $lock_dir" >&2
+        exit 1
+    fi
+
+    mkdir -p "$lock_dir" 2>/dev/null || {
+        echo "ERROR: Cannot create lock directory: $lock_dir" >&2
+        exit 1
+    }
+
+    if (set -o noclobber; echo "$$" > "$CONTROLLER_LOCK_FILE") 2>/dev/null; then
+        _lock_acquired=true
+        return
+    fi
+
+    if [[ -f "$CONTROLLER_LOCK_FILE" ]]; then
+        lock_pid="$(cat "$CONTROLLER_LOCK_FILE" 2>/dev/null || true)"
+        if [[ "$lock_pid" =~ ^[0-9]+$ ]] && kill -0 "$lock_pid" 2>/dev/null; then
+            echo "ERROR: Another controller instance is already running (pid: $lock_pid)" >&2
+            exit 1
+        fi
+
+        rm -f "$CONTROLLER_LOCK_FILE" 2>/dev/null || {
+            echo "ERROR: Cannot remove stale lock file: $CONTROLLER_LOCK_FILE" >&2
+            exit 1
+        }
+
+        if (set -o noclobber; echo "$$" > "$CONTROLLER_LOCK_FILE") 2>/dev/null; then
+            _lock_acquired=true
+            return
+        fi
+    fi
+
+    echo "ERROR: Unable to acquire controller lock: $CONTROLLER_LOCK_FILE" >&2
+    exit 1
+}
+
+release_instance_lock() {
+    local lock_pid
+
+    if [[ "$_lock_acquired" != "true" ]] || [[ -z "$CONTROLLER_LOCK_FILE" ]]; then
+        return
+    fi
+
+    lock_pid="$(cat "$CONTROLLER_LOCK_FILE" 2>/dev/null || true)"
+    if [[ "$lock_pid" == "$$" ]]; then
+        rm -f "$CONTROLLER_LOCK_FILE" 2>/dev/null || true
+    fi
 }
 
 # ============================================================================
@@ -199,12 +271,14 @@ spawn_load_generators() {
 
 wait_for_termination() {
     local pid="$1"
-    local max_wait=3
-    local waited=0
+    local max_wait_secs=3
+    local poll_interval_secs=0.5
+    local max_checks=$((max_wait_secs * 2))
+    local checks=0
 
-    while kill -0 "$pid" 2>/dev/null && (( waited < max_wait )); do
-        sleep 0.5
-        ((waited++)) || true
+    while kill -0 "$pid" 2>/dev/null && (( checks < max_checks )); do
+        sleep "$poll_interval_secs"
+        ((checks++)) || true
     done
 
     # Force kill only if this is still one of our managed generators.
@@ -232,19 +306,23 @@ stop_one_generator() {
 
     if kill -TERM "$pid" 2>/dev/null; then
         wait_for_termination "$pid"
-        log "$RED" "Stopped 1 load generator (pid: ${pid})"
     else
         log "$YELLOW" "Unable to stop load generator (pid: ${pid}); it may have already exited"
     fi
 
-    # Remove from array
-    unset "load_pids[$last_index]"
-    load_pids=("${load_pids[@]+"${load_pids[@]}"}")
+    prune_load_pids
+
+    if is_managed_pid "$pid"; then
+        log "$YELLOW" "Load generator still active after stop attempt (pid: ${pid}); keeping it tracked"
+    else
+        log "$RED" "Stopped 1 load generator (pid: ${pid})"
+    fi
 }
 
 stop_all_generators() {
     local pid
     local count
+    local remaining
 
     prune_load_pids
 
@@ -265,8 +343,14 @@ stop_all_generators() {
         wait_for_termination "$pid"
     done
 
-    load_pids=()
-    log "$GREEN" "Stopped all ${count} load generators"
+    prune_load_pids
+    remaining="${#load_pids[@]}"
+
+    if (( remaining == 0 )); then
+        log "$GREEN" "Stopped all ${count} load generators"
+    else
+        log "$YELLOW" "Stopped $((count - remaining))/${count} generators; ${remaining} still active and tracked"
+    fi
 }
 
 cleanup() {
@@ -329,9 +413,12 @@ validate_generator_usage
 
 # Initialize logging
 init_log_file
+acquire_instance_lock
+trap release_instance_lock EXIT
 
 log "$GREEN" "OCI Idle Avoidance Controller starting..."
 log "$GREEN" "Configuration: GENERATOR_USAGE=${GENERATOR_USAGE}, MAX_GENERATORS=${MAX_GENERATORS}"
+log "$GREEN" "Lock file: ${CONTROLLER_LOCK_FILE}"
 
 # Set up signal handlers
 trap cleanup SIGINT SIGTERM

@@ -1,7 +1,7 @@
 [Unit]
 Description=OCI Idle Avoidance Controller
 After=network.target
-Documentation=https://github.com/pierre/OCI-Idle-Avoidance
+Documentation=https://github.com/prrtzt/OCI-Idle-Avoidance
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
@@ -20,13 +20,15 @@ LogsDirectoryMode=0750
 
 # Optional: Override generator CPU usage (0.0-1.0, default 0.01)
 # Environment=GENERATOR_USAGE=0.01
+# Optional: Override controller lock file (default: <log-dir>/load_controller.lock)
+# Environment=CONTROLLER_LOCK_FILE=/var/log/oci-idle-avoidance/load_controller.lock
 
 # Restart policy with limits to prevent runaway restarts
 Restart=on-failure
 RestartSec=10s
 
 # Security hardening
-User=nobody
+DynamicUser=true
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
