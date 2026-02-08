@@ -33,6 +33,9 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/log/oci-idle-avoidance
 
+# Resource limits (MAX_GENERATORS=40 + controller + buffer)
+LimitNPROC=50
+
 # Logging
 StandardOutput=journal
 StandardError=journal

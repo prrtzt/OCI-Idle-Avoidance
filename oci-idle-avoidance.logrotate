@@ -1,0 +1,9 @@
+/var/log/oci-idle-avoidance/*.log {
+    weekly
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 nobody root
+}

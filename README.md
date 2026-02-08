@@ -10,13 +10,15 @@ The scripts work by monitoring the CPU usage and spinning up "load generator" Py
 
 ### Structure
 
-This repository contains two scripts and a systemd service file:
+This repository contains two scripts and configuration files:
 
 1. **Bash script (`load_controller.sh`)**: Continuously monitors CPU usage and starts/stops "load generator" Python processes based on thresholds. Includes graceful signal handling, input validation, and secure logging.
 
 2. **Python script (`load_generator.py`)**: Runs a loop that consumes CPU cycles. Handles signals gracefully for clean shutdown.
 
 3. **Systemd service file (`oci-idle-avoidance.service`)**: Allows the controller to run as a system service with automatic startup on boot, restart limits, and security hardening.
+
+4. **Logrotate config (`oci-idle-avoidance.logrotate`)**: Prevents log files from growing indefinitely.
 
 ### Configuration
 
@@ -37,7 +39,7 @@ Additional settings:
 |---------|---------|-------------|
 | `MAX_GENERATORS` | 40 | Maximum concurrent generator processes |
 | `GENERATOR_USAGE` | 0.01 | CPU fraction per generator (0.0-1.0) |
-| `LOOP_SLEEP_SECONDS` | 5 | Monitoring interval in seconds |
+| `MPSTAT_INTERVAL` | 5 | CPU sampling interval in seconds |
 
 The `GENERATOR_USAGE` can also be set via environment variable.
 
@@ -146,6 +148,16 @@ Environment=GENERATOR_USAGE=0.02
 ```
 
 Then reload: `sudo systemctl daemon-reload && sudo systemctl restart oci-idle-avoidance`
+
+#### Setting Up Log Rotation (Recommended)
+
+To prevent log files from growing indefinitely, install the logrotate configuration:
+
+```bash
+sudo cp oci-idle-avoidance.logrotate /etc/logrotate.d/oci-idle-avoidance
+```
+
+This rotates logs weekly, keeping 4 compressed copies.
 
 ### Alternative: Running Manually with Screen
 

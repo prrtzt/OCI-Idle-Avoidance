@@ -28,7 +28,7 @@ CRITICAL_THRESHOLD=80.0
 BURST_GENERATORS=5
 MAX_GENERATORS=40
 GENERATOR_USAGE="${GENERATOR_USAGE:-0.01}"
-LOOP_SLEEP_SECONDS=5
+MPSTAT_INTERVAL=5
 
 # Terminal colors
 RED='\033[0;31m'
@@ -63,9 +63,15 @@ init_log_file() {
     local log_dir
     log_dir="$(dirname "$LOG_FILE")"
 
-    # Resolve to absolute path to prevent symlink attacks
+    # Resolve to absolute path to prevent symlink attacks on file or directory
     if [[ -L "$LOG_FILE" ]]; then
         echo "ERROR: Log file path is a symlink, refusing to use: $LOG_FILE" >&2
+        LOG_FILE="$DEFAULT_LOG_FILE"
+        log_dir="$(dirname "$LOG_FILE")"
+    fi
+
+    if [[ -L "$log_dir" ]]; then
+        echo "ERROR: Log directory is a symlink, refusing to use: $log_dir" >&2
         LOG_FILE="$DEFAULT_LOG_FILE"
         log_dir="$(dirname "$LOG_FILE")"
     fi
@@ -130,9 +136,9 @@ is_managed_pid() {
     # SCRIPT_DIR is already canonical, so match against that exact path
     expected_path="${SCRIPT_DIR}/load_generator.py"
 
-    # Check for exact script path match (not substring)
-    [[ "$cmdline" == *"python"*"$expected_path"* ]] || \
-    [[ "$cmdline" == *"$expected_path"* ]]
+    # Match: python3 /path/to/load_generator.py <usage> (stricter pattern)
+    # Ensures the path appears as the script argument, not embedded in another path
+    [[ "$cmdline" =~ python3?[[:space:]]+"$expected_path"[[:space:]] ]]
 }
 
 prune_load_pids() {
@@ -156,9 +162,7 @@ spawn_load_generators() {
     local load_pid
     local spawned=0
 
-    # Atomic check and spawn - prune first
-    prune_load_pids
-
+    # Array already pruned in main loop
     available=$((MAX_GENERATORS - ${#load_pids[@]}))
     if (( available <= 0 )); then
         log "$YELLOW" "Generator cap reached (${MAX_GENERATORS}); skipping new generators"
@@ -193,6 +197,25 @@ spawn_load_generators() {
     fi
 }
 
+wait_for_termination() {
+    local pid="$1"
+    local max_wait=3
+    local waited=0
+
+    while kill -0 "$pid" 2>/dev/null && (( waited < max_wait )); do
+        sleep 0.5
+        ((waited++)) || true
+    done
+
+    # Force kill only if this is still one of our managed generators.
+    if is_managed_pid "$pid"; then
+        kill -KILL "$pid" 2>/dev/null || true
+        log "$YELLOW" "Force-killed managed generator (pid: ${pid}) after SIGTERM timeout"
+    elif kill -0 "$pid" 2>/dev/null; then
+        log "$YELLOW" "Skipping SIGKILL for pid ${pid}: process no longer matches managed generator"
+    fi
+}
+
 stop_one_generator() {
     local last_index
     local pid
@@ -208,6 +231,7 @@ stop_one_generator() {
     pid="${load_pids[$last_index]}"
 
     if kill -TERM "$pid" 2>/dev/null; then
+        wait_for_termination "$pid"
         log "$RED" "Stopped 1 load generator (pid: ${pid})"
     else
         log "$YELLOW" "Unable to stop load generator (pid: ${pid}); it may have already exited"
@@ -220,6 +244,7 @@ stop_one_generator() {
 
 stop_all_generators() {
     local pid
+    local count
 
     prune_load_pids
 
@@ -228,12 +253,20 @@ stop_all_generators() {
         return
     fi
 
+    count="${#load_pids[@]}"
+
+    # Send SIGTERM to all
     for pid in "${load_pids[@]}"; do
         kill -TERM "$pid" 2>/dev/null || true
     done
 
+    # Wait for all to terminate, force-kill if needed
+    for pid in "${load_pids[@]}"; do
+        wait_for_termination "$pid"
+    done
+
     load_pids=()
-    log "$GREEN" "Stopped all load generators"
+    log "$GREEN" "Stopped all ${count} load generators"
 }
 
 cleanup() {
@@ -250,9 +283,10 @@ cleanup() {
 read_cpu_usage() {
     local output
     local avg_usage
+    local timeout_secs=$((MPSTAT_INTERVAL + 5))
 
     # Run mpstat with timeout to prevent hangs
-    if ! output="$(timeout 10 mpstat -P ALL 5 1 2>/dev/null)"; then
+    if ! output="$(timeout "$timeout_secs" mpstat -P ALL "$MPSTAT_INTERVAL" 1 2>/dev/null)"; then
         echo "NaN"
         return
     fi
@@ -307,7 +341,7 @@ while true; do
 
     if [[ "$avg_usage" == "NaN" ]] || [[ -z "$avg_usage" ]]; then
         log "$RED" "Unable to parse CPU usage from mpstat output; retrying"
-        sleep "$LOOP_SLEEP_SECONDS"
+        sleep 2
         continue
     fi
 
@@ -327,6 +361,5 @@ while true; do
         log "$GREEN" "CPU usage between ${LOW_BURST_THRESHOLD}% and ${LOW_SINGLE_THRESHOLD}% - starting 1 load generator"
         spawn_load_generators 1
     fi
-
-    sleep "$LOOP_SLEEP_SECONDS"
+    # No sleep needed - mpstat already takes MPSTAT_INTERVAL seconds
 done
