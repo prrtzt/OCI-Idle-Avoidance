@@ -31,23 +31,23 @@ while true; do
     avg_usage=$(echo "$output" | awk '/Average:/ && $2 ~ /[0-9]/ {total+=$NF; count++} END {print 100 - total/count}')
     echo -e "${YELLOW}Average CPU Usage: $avg_usage%. Current number of load generators: ${#load_pids[@]}${NC}"
 
-    if (( $(echo "$avg_usage < 12.0" | bc -l) )); then
-        echo -e "${GREEN}CPU usage is below 15%, starting additional load generators...${NC}"
+    if (( $(echo "$avg_usage < 19.0" | bc -l) )); then
+        echo -e "${GREEN}CPU usage is below 22%, starting additional load generators...${NC}"
         for i in {1..5}; do
             python3 load_generator.py 0.01 & load_pid=$!
             load_pids+=($load_pid)
         done
-    elif (( $(echo "$avg_usage >= 12.0 && $avg_usage < 15.0" | bc -l) )); then
-        echo -e "${GREEN}CPU usage is between 12% and 15%, starting one additional load generator until 15% CPU usage...${NC}"
+    elif (( $(echo "$avg_usage >= 19.0 && $avg_usage < 22.0" | bc -l) )); then
+        echo -e "${GREEN}CPU usage is between 19% and 22%, starting one additional load generator until 22% CPU usage...${NC}"
         python3 load_generator.py 0.01 & load_pid=$!
         load_pids+=($load_pid)
-    elif (( $(echo "$avg_usage > 20.0" | bc -l) )); then
+    elif (( $(echo "$avg_usage > 27.0" | bc -l) )); then
         if (( ${#load_pids[@]} > 0 )); then
-            echo -e "${RED}CPU usage is above 20%, stopping one load generator...${NC}"
+            echo -e "${RED}CPU usage is above 27%, stopping one load generator...${NC}"
             kill ${load_pids[-1]} # kill the last load generator
             unset 'load_pids[${#load_pids[@]}-1]' # remove it from the array
         else
-            echo -e "${RED}CPU usage is above 20%, no load generators are running...${NC}"
+            echo -e "${RED}CPU usage is above 27%, no load generators are running...${NC}"
         fi
     elif (( $(echo "$avg_usage > 80.0" | bc -l) )); then
         if (( ${#load_pids[@]} > 0 )); then

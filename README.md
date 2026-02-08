@@ -8,7 +8,7 @@ The scripts work by monitoring the CPU usage and spinning up "load generator" Py
 
 ### Structure
 This repository contains two scripts: 
-1. A Bash script (`load_controller.sh`): This script continuously monitors the CPU usage and spins up "load generator" Python scripts when the CPU usage drops below 15%. It also manages the load generators, stopping them when CPU usage is above 20%, and stopping all of them when CPU usage is above 80%. The script makes sure the CPU load stays within a reasonable range, giving more important tasks the resources they need while ensuring the VM doesn't fall into the idle state. 
+1. A Bash script (`load_controller.sh`): This script continuously monitors the CPU usage and spins up "load generator" Python scripts when the CPU usage drops below 22%. It also manages the load generators, stopping them when CPU usage is above 27%, and stopping all of them when CPU usage is above 80%. The script makes sure the CPU load stays within a reasonable range, giving more important tasks the resources they need while ensuring the VM doesn't fall into the idle state. 
 
 2. A Python script (`load_generator.py`): This script runs a loop that consumes CPU cycles. The number of cycles consumed per second can be configured by adjusting the argument passed to the script.
 
