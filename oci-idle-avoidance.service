@@ -1,0 +1,26 @@
+[Unit]
+Description=OCI Idle Avoidance Controller
+After=network.target
+Documentation=https://github.com/pierre/OCI-Idle-Avoidance
+
+[Service]
+Type=simple
+# IMPORTANT: Update this path to match where you cloned the repository
+WorkingDirectory=/opt/oci-idle-avoidance/scripts
+ExecStart=/opt/oci-idle-avoidance/scripts/load_controller.sh
+
+# Restart the service if it crashes
+Restart=on-failure
+RestartSec=10s
+
+# Run as root (required for system monitoring)
+User=root
+Group=root
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=oci-idle-avoidance
+
+[Install]
+WantedBy=multi-user.target
