@@ -37,8 +37,8 @@ Additional settings:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `MAX_GENERATORS` | 40 | Maximum concurrent generator processes |
-| `GENERATOR_USAGE` | 0.01 | CPU fraction per generator (0.0-1.0) |
+| `MAX_GENERATORS` | 80 | Maximum concurrent generator processes |
+| `GENERATOR_USAGE` | 0.02 | CPU fraction per generator (0.0-1.0) |
 | `MPSTAT_INTERVAL` | 5 | CPU sampling interval in seconds |
 | `CONTROLLER_LOCK_FILE` | `<log-dir>/load_controller.lock` | Lock file path used to prevent multiple controller instances |
 
@@ -142,11 +142,11 @@ sudo systemctl disable oci-idle-avoidance
 
 #### Customizing Generator Usage
 
-To change how much CPU each generator consumes, set the environment variable:
+To change how much CPU each generator consumes (default is 0.02), set the environment variable:
 
 ```bash
 # In /etc/systemd/system/oci-idle-avoidance.service
-Environment=GENERATOR_USAGE=0.02
+Environment=GENERATOR_USAGE=0.03
 ```
 
 Then reload: `sudo systemctl daemon-reload && sudo systemctl restart oci-idle-avoidance`

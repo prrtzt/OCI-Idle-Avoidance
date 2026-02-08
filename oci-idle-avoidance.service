@@ -18,8 +18,8 @@ Environment=LOG_FILE=/var/log/oci-idle-avoidance/load_controller.log
 LogsDirectory=oci-idle-avoidance
 LogsDirectoryMode=0750
 
-# Optional: Override generator CPU usage (0.0-1.0, default 0.01)
-# Environment=GENERATOR_USAGE=0.01
+# Optional: Override generator CPU usage (0.0-1.0, default 0.02)
+# Environment=GENERATOR_USAGE=0.02
 # Optional: Override controller lock file (default: <log-dir>/load_controller.lock)
 # Environment=CONTROLLER_LOCK_FILE=/var/log/oci-idle-avoidance/load_controller.lock
 
@@ -35,8 +35,8 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/var/log/oci-idle-avoidance
 
-# Resource limits (MAX_GENERATORS=40 + controller + buffer)
-LimitNPROC=50
+# Resource limits (MAX_GENERATORS=80 + controller + buffer)
+LimitNPROC=90
 
 # Logging
 StandardOutput=journal
