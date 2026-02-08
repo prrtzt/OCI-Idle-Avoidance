@@ -127,8 +127,14 @@ acquire_instance_lock() {
     fi
 
     if [[ -L "$lock_dir" ]]; then
-        echo "ERROR: Lock directory is a symlink, refusing to use: $lock_dir" >&2
-        exit 1
+        # Allow systemd-managed private log directories (symlinks containing "private/")
+        local symlink_target
+        symlink_target="$(readlink "$lock_dir" 2>/dev/null || echo "")"
+        if [[ ! "$symlink_target" =~ private/ ]]; then
+            echo "ERROR: Lock directory is a symlink, refusing to use: $lock_dir" >&2
+            exit 1
+        fi
+        # For systemd-managed directories, keep using the symlink path
     fi
 
     mkdir -p "$lock_dir" 2>/dev/null || {
